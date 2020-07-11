@@ -18,6 +18,7 @@
 package router
 
 import (
+	"context"
 	"math/rand"
 	"regexp"
 	"strings"
@@ -30,6 +31,7 @@ import (
 	"mosn.io/mosn/pkg/protocol"
 	httpmosn "mosn.io/mosn/pkg/protocol/http"
 	"mosn.io/mosn/pkg/types"
+	"mosn.io/mosn/pkg/upstream/cluster"
 )
 
 type RouteRuleImplBase struct {
@@ -43,7 +45,8 @@ type RouteRuleImplBase struct {
 	regexRewrite          v2.RegexRewrite
 	regexPattern          *regexp.Regexp
 	hostRewrite           string
-	autoHostRewrite       bool // TODO: not implement yet
+	autoHostRewrite       bool
+	autoHostRewriteHeader string
 	requestHeadersParser  *headerParser
 	responseHeadersParser *headerParser
 	// information
@@ -71,6 +74,7 @@ func NewRouteRuleImplBase(vHost *VirtualHostImpl, route *v2.Router) (*RouteRuleI
 		regexRewrite:          route.Route.RegexRewrite,
 		hostRewrite:           route.Route.HostRewrite,
 		autoHostRewrite:       route.Route.AutoHostRewrite,
+		autoHostRewriteHeader: route.Route.AutoHostRewriteHeader,
 		requestHeadersParser:  getHeaderParser(route.Route.RequestHeadersToAdd, nil),
 		responseHeadersParser: getHeaderParser(route.Route.ResponseHeadersToAdd, route.Route.ResponseHeadersToRemove),
 		upstreamProtocol:      route.Route.UpstreamProtocol,
@@ -200,14 +204,16 @@ func (rri *RouteRuleImplBase) matchRoute(headers api.HeaderMap, randomValue uint
 		return false
 	}
 	// 2. match query parameters
-	var queryParams types.QueryParams
-	if QueryString, ok := headers.Get(protocol.MosnHeaderQueryStringKey); ok {
-		queryParams = httpmosn.ParseQueryString(QueryString)
-	}
-	if len(queryParams) != 0 {
-		if !ConfigUtilityInst.MatchQueryParams(queryParams, rri.configQueryParameters) {
-			log.DefaultLogger.Debugf(RouterLogFormat, "routerule", "match query params", queryParams)
-			return false
+	if len(rri.configQueryParameters) != 0 {
+		var queryParams types.QueryParams
+		if QueryString, ok := headers.Get(protocol.MosnHeaderQueryStringKey); ok {
+			queryParams = httpmosn.ParseQueryString(QueryString)
+		}
+		if len(queryParams) != 0 {
+			if !ConfigUtilityInst.MatchQueryParams(queryParams, rri.configQueryParameters) {
+				log.DefaultLogger.Debugf(RouterLogFormat, "routerule", "match query params", queryParams)
+				return false
+			}
 		}
 	}
 	return true
@@ -256,6 +262,17 @@ func (rri *RouteRuleImplBase) finalizeRequestHeaders(headers api.HeaderMap, requ
 	rri.vHost.globalRouteConfig.requestHeadersParser.evaluateHeaders(headers, requestInfo)
 	if len(rri.hostRewrite) > 0 {
 		headers.Set(protocol.IstioHeaderHostKey, rri.hostRewrite)
+	} else if len(rri.autoHostRewriteHeader) > 0 {
+		if headerValue, ok := headers.Get(rri.autoHostRewriteHeader); ok {
+			headers.Set(protocol.IstioHeaderHostKey, headerValue)
+		}
+	} else if rri.autoHostRewrite {
+
+		clusterSnapshot := cluster.GetClusterMngAdapterInstance().GetClusterSnapshot(context.TODO(), rri.routerAction.ClusterName)
+		if clusterSnapshot != nil && (clusterSnapshot.ClusterInfo().ClusterType() == v2.STRICT_DNS_CLUSTER) {
+			headers.Set(protocol.IstioHeaderHostKey, requestInfo.UpstreamHost().Hostname())
+		}
+
 	}
 }
 
