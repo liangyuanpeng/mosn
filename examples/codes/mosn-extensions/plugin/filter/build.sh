@@ -1,11 +1,11 @@
 function make_checker {
-	go build -o checker checker.go
+	go build -o tokener tokener.go
 }
 
 function make_mosn {
 	mkdir ./build_mosn
 	cp ../../../../../cmd/mosn/main/* ./build_mosn
-	cp ./checker_filter.go ./build_mosn
+	cp ./tokener_filter.go ./build_mosn
 	cd ./build_mosn
 	go build -o mosn
 	mv mosn ../

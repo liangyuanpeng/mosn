@@ -56,7 +56,7 @@
 				"max_request_per_conn": 1024,
 				"conn_buffer_limit_bytes":32768,
 				"hosts":[
-					{"address":"127.0.0.1:8080"}
+					{"address":"127.0.0.1:8082"}
 				]
 			}
 		]
