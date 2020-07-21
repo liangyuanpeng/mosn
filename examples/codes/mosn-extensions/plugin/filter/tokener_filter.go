@@ -76,6 +76,9 @@ func (f *DemoFilter) OnReceive(ctx context.Context, headers api.HeaderMap, buf b
 	if resp.Status == -1 {
 		f.handler.SendHijackReply(403, headers)
 		return api.StreamFilterStop
+	} else if resp.Status == -2 {
+		f.handler.SendHijackReply(200, headers)
+		return api.StreamFilterStop
 	} else if resp.Status == 1 {
 		//filter通过 添加token
 		for k, v := range resp.GetHeader() {

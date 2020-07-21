@@ -11,8 +11,13 @@
 						"domains": ["*"],
 						"routers": [
 							{
-								"match":{"prefix":"/"},
-								"route":{"cluster_name":"serverCluster"}
+								"match":{
+									"prefix":"/v2"
+								},
+								"route":{
+									"prefix_rewrite":"/v2/lan-k8s",
+									"cluster_name":"serverCluster"
+								}
 							}
 						]
 					}]
@@ -21,7 +26,7 @@
 			"listeners":[
 				{
 					"name":"serverListener",
-					"address": "127.0.0.1:2046",
+					"address": "0.0.0.0:2046",
 					"bind_port": true,
 					"filter_chains": [{
 						"filters": [
@@ -56,7 +61,7 @@
 				"max_request_per_conn": 1024,
 				"conn_buffer_limit_bytes":32768,
 				"hosts":[
-					{"address":"127.0.0.1:8082"}
+					{"address":"192.168.1.7:8789"}
 				]
 			}
 		]

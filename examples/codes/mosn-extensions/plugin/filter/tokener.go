@@ -19,34 +19,56 @@ type checker struct {
 
 func (c *checker) Call(request *proto.Request) (*proto.Response, error) {
 	header := request.Header
-	for k, v := range c.config {
-		value, ok := header[k]
-		if !ok || value != v {
-			return &proto.Response{
-				Status: -1,
-			}, nil
-		}
-	}
+	// for k, v := range c.config {
+	// 	value, ok := header[k]
+	// 	if !ok || value != v {
+	// 		return &proto.Response{
+	// 			Status: -1,
+	// 		}, nil
+	// 	}
+	// }
 
 	//req path
 	//X-Mosn-Path
 
 	reqPath := header["X-Mosn-Path"]
-	reqPath = strings.ReplaceAll(reqPath, "/v2", "")
+
+	log.DefaultLogger.Infof("######################reqPath1:%s", reqPath)
+
+	reqPath = strings.ReplaceAll(reqPath, "/v2/", "")
+	log.DefaultLogger.Infof("######################reqPath1.1:%s", reqPath, len(reqPath))
+
 	if len(reqPath) > 0 {
 		//
 		namespace := "lan-k8s"
+		//TODO 由于filter执行优先级比router高 所以这里还没重写路径 没有lan-k8s
+		namespace = ""
+
+		log.DefaultLogger.Infof("######################reqPath2:%s", reqPath)
+
 		if strings.Contains(reqPath, namespace) {
+			namespace = "lan-k8s"
 			reqPath = strings.ReplaceAll(reqPath, namespace+"/", "")
 
 			repoTag := strings.Split(reqPath, "/")
-			if len(repoTag) > 0 {
-				if repoTag[0] != "" {
+			log.DefaultLogger.Infof("######################repoTag:%s", repoTag)
+
+			if len(repoTag) > 1 {
+				repo := repoTag[0]
+				if repo == "" {
+					repo = repoTag[1]
+				}
+				if repo != "" {
 					//从redis获取repo的token
-					token := getToken(repoTag[0])
+					log.DefaultLogger.Infof("######################repoTag[0]:%s", repoTag[0])
+
+					rkey := "dt:lan-k8s:" + repo
+					token := getToken(rkey)
+					log.DefaultLogger.Infof("######################token:%s", token)
+
 					if token != "" {
 						h := make(map[string]string)
-						h["Authorization"] = token
+						h["Authorization"] = "Bearer " + token
 						return &proto.Response{
 							Status: 1,
 							Header: h,
@@ -55,6 +77,9 @@ func (c *checker) Call(request *proto.Request) (*proto.Response, error) {
 				}
 			} else {
 				//直接返回
+				return &proto.Response{
+					Status: -1,
+				}, nil
 			}
 		} else {
 			//错误的namespace 直接返回
@@ -66,7 +91,7 @@ func (c *checker) Call(request *proto.Request) (*proto.Response, error) {
 	} else {
 		//v2请求 可以直接返回结果
 		return &proto.Response{
-			Status: -1,
+			Status: -2,
 		}, nil
 	}
 
@@ -78,14 +103,17 @@ func (c *checker) Call(request *proto.Request) (*proto.Response, error) {
 }
 
 func getToken(repo string) string {
+
+	log.DefaultLogger.Infof("################# get redis data:%s", repo)
+
 	if redisClient != nil {
 
-		val, err := redisClient.Get("key").Result()
+		val, err := redisClient.Get(repo).Result()
 		if err != nil {
-			log.DefaultLogger.Errorf("redis.get.valu.failed;%s", err)
+			log.DefaultLogger.Errorf("redis.get.valu.failed:{}", val, err)
 		} else {
-			return val
 			log.DefaultLogger.Infof("hello.key.value:%s", val)
+			return val
 		}
 
 	} else {
@@ -113,10 +141,17 @@ func init() {
 		Password: redisPasswd, // no password set
 		// DB:       0,           // use default DB
 	})
-
+	_, err := redisClient.Ping().Result()
+	if err != nil {
+		log.DefaultLogger.Errorf("################# redis.ping.result failed:%s", err)
+	} else {
+		log.DefaultLogger.Infof("################# redis.ping.result success")
+	}
 }
 
 func main() {
+
+	// initConfig()
 
 	conf := flag.String("c", "", "-c config.json")
 	flag.Parse()
