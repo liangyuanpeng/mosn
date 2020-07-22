@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-redis/redis"
 	"mosn.io/mosn/pkg/log"
@@ -55,9 +56,16 @@ func (c *checker) Call(request *proto.Request) (*proto.Response, error) {
 
 			if len(repoTag) > 1 {
 				repo := repoTag[0]
-				if repo == "" {
-					repo = repoTag[1]
+				if strings.Contains(reqPath, "manifests") && len(repoTag) > 2 {
+					tag := repoTag[2]
+					rkey := "lan:count:" + repo + ":" + tag
+					count, _ := redisClient.Incr(rkey).Result()
+					if count == 1 {
+						//默认2天过期
+						redisClient.Expire(rkey, time.Duration(84600*2)*time.Second)
+					}
 				}
+
 				if repo != "" {
 					//从redis获取repo的token
 					log.DefaultLogger.Infof("######################repoTag[0]:%s", repoTag[0])
@@ -69,6 +77,7 @@ func (c *checker) Call(request *proto.Request) (*proto.Response, error) {
 					if token != "" {
 						h := make(map[string]string)
 						h["Authorization"] = "Bearer " + token
+						// h["Host"] = "192.168.1.7:8789"
 						return &proto.Response{
 							Status: 1,
 							Header: h,
@@ -110,6 +119,7 @@ func getToken(repo string) string {
 
 		val, err := redisClient.Get(repo).Result()
 		if err != nil {
+
 			log.DefaultLogger.Errorf("redis.get.valu.failed:{}", val, err)
 		} else {
 			log.DefaultLogger.Infof("hello.key.value:%s", val)
