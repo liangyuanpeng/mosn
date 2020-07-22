@@ -56,15 +56,17 @@ func (c *checker) Call(request *proto.Request) (*proto.Response, error) {
 
 			if len(repoTag) > 1 {
 				repo := repoTag[0]
-				if strings.Contains(reqPath, "manifests") && len(repoTag) > 2 {
-					tag := repoTag[2]
-					rkey := "lan:count:" + repo + ":" + tag
-					count, _ := redisClient.Incr(rkey).Result()
-					if count == 1 {
-						//默认2天过期
-						redisClient.Expire(rkey, time.Duration(84600*2)*time.Second)
+				go func() {
+					if strings.Contains(reqPath, "manifests") && len(repoTag) > 2 {
+						tag := repoTag[2]
+						rkey := "lan:count:" + repo + ":" + tag
+						count, _ := redisClient.Incr(rkey).Result()
+						if count == 1 {
+							//默认2天过期
+							redisClient.Expire(rkey, time.Duration(84600*2)*time.Second)
+						}
 					}
-				}
+				}()
 
 				if repo != "" {
 					//从redis获取repo的token
